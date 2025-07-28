@@ -1,9 +1,6 @@
-name: Build OpenWrt 24.10.1 with helloworld
+name: Build helloworld feed packages only
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -14,13 +11,15 @@ jobs:
       FEED_HELLOWORLD: https://github.com/fw876/helloworld.git
 
     steps:
-    - name: Checkout workflow repo
-      uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v4
 
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y build-essential ccache libncurses5-dev zlib1g-dev gawk git gettext unzip file python3
+        sudo apt install -y build-essential ccache ecj fastjar file g++ gawk \
+          gettext git java-propose-classpath libelf-dev libncurses5-dev \
+          libncursesw5-dev libssl-dev python3 unzip wget zlib1g-dev
 
     - name: Clone OpenWrt source
       run: |
@@ -28,45 +27,28 @@ jobs:
 
     - name: Add helloworld feed
       run: |
-        echo "src-git helloworld $FEED_HELLOWORLD;main" >> openwrt/feeds.conf.default
+        cd openwrt
+        sed -i "/helloworld/d" feeds.conf.default
+        echo "src-git helloworld $FEED_HELLOWORLD" >> feeds.conf.default
 
-    - name: Update and install feeds
+    - name: Update and install helloworld feed
       run: |
         cd openwrt
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
+        ./scripts/feeds update helloworld
+        ./scripts/feeds install -a -f -p helloworld
 
-    - name: Copy default config
+    - name: Configure minimal build (no firmware)
       run: |
         cd openwrt
-        # 使用官方默认配置为起点
-        cp defconfig .config
-        # 也可以使用下面指令生成默认config文件
-        # make defconfig
-
-    - name: Modify config to select luci-app-ssr-plus and helloworld packages
-      run: |
-        cd openwrt
-        # 这里用脚本自动选择helloworld相关插件（例如luci-app-ssr-plus）
-        scripts/feeds install -a
-        # 通过修改.config勾选插件：
-        echo "CONFIG_PACKAGE_luci-app-ssr-plus=y" >> .config
-        echo "CONFIG_PACKAGE_ipt2socks=y" >> .config
-        echo "CONFIG_PACKAGE_shadowsocks-libev-server=y" >> .config
-        echo "CONFIG_PACKAGE_shadowsocks-libev-ss-redir=y" >> .config
-        echo "CONFIG_PACKAGE_simple-obfs=y" >> .config
-        # 生成完整配置
         make defconfig
 
-    - name: Build firmware and packages
+    - name: Build only helloworld packages
       run: |
         cd openwrt
-        make -j$(nproc) V=s
+        make package/helloworld/compile -j$(nproc) V=s
 
-    - name: Upload artifacts
+    - name: Upload compiled helloworld packages
       uses: actions/upload-artifact@v4
       with:
-        name: openwrt-build-artifacts
-        path: openwrt/bin/
-
-
+        name: helloworld-ipks
+        path: openwrt/bin/packages/
